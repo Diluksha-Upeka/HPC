@@ -1,11 +1,8 @@
-// =============================================================================
-// graph_bfs.cpp
 // Foundational graph processing: adjacency-list representation, synthetic graph
 // generation, and serial Breadth-First Search (BFS) baseline.
 //
 // This serial implementation serves as the correctness reference and performance
 // baseline for future OpenMP and MPI parallelizations.
-// =============================================================================
 
 #include <chrono>
 #include <cstdint>
@@ -17,13 +14,7 @@
 #include <string>
 #include <vector>
 
-// =============================================================================
-// Graph Data Structure — Adjacency List (CSR-friendly layout)
-// =============================================================================
-// Each vertex stores a sorted, deduplicated vector of neighbor indices.
-// For large-scale HPC work this can later be swapped to a CSR (Compressed
-// Sparse Row) representation without changing the BFS interface.
-// =============================================================================
+// Graph Data Structure — Adjacency List 
 
 struct Graph {
     int num_vertices;
@@ -32,19 +23,24 @@ struct Graph {
     explicit Graph(int V) : num_vertices(V), adj(V) {}
 };
 
-// =============================================================================
+bool add_undirected_edge(Graph& graph, int u, int v) {
+    if (u < 0 || v < 0 || u >= graph.num_vertices || v >= graph.num_vertices || u == v) {
+        return false;
+    }
+
+    graph.adj[u].push_back(v);
+    graph.adj[v].push_back(u);
+    return true;
+}
+
 // Synthetic Undirected Graph Generator
-// =============================================================================
 // For every unique vertex pair (u, v) with u < v, an edge is added with
-// probability `density` (Erdos-Renyi G(n, p) model).
 //
 // Parameters:
 //   V       — total number of vertices  (V >= 0)
 //   density — edge probability in [0.0, 1.0]
-//   seed    — RNG seed for reproducibility (default: 42)
 //
 // Complexity: O(V^2) — iterates over all possible edges.
-// =============================================================================
 
 Graph generate_graph(int V, double density, uint64_t seed = 42) {
     Graph g(V);
@@ -68,9 +64,7 @@ Graph generate_graph(int V, double density, uint64_t seed = 42) {
     return g;
 }
 
-// =============================================================================
 // Serial Breadth-First Search (BFS)
-// =============================================================================
 // Standard level-synchronous BFS that computes shortest-path distances
 // (in number of hops) from a single source vertex.
 //
@@ -83,7 +77,6 @@ Graph generate_graph(int V, double density, uint64_t seed = 42) {
 //   from `source` to vertex i.  Unreachable vertices are marked with -1.
 //
 // Complexity: O(V + E)
-// =============================================================================
 
 std::vector<int> bfs_serial(const Graph& graph, int source) {
     const int V = graph.num_vertices;
@@ -116,9 +109,7 @@ std::vector<int> bfs_serial(const Graph& graph, int source) {
     return distance;
 }
 
-// =============================================================================
 // Output Helpers
-// =============================================================================
 
 void print_usage(const char* program) {
     std::cout
@@ -130,6 +121,7 @@ void print_usage(const char* program) {
         << "  source     BFS starting node            (default: 0)\n"
         << "\n"
         << "Options:\n"
+        << "  --manual   Read graph data interactively from stdin\n"
         << "  --json     Output results as JSON (pipe to visualizer)\n"
         << "  --seed N   RNG seed for reproducibility  (default: 42)\n"
         << "  --help     Show this help message\n"
@@ -137,8 +129,59 @@ void print_usage(const char* program) {
         << "Examples:\n"
         << "  " << program << "                         # 10 nodes, 0.3 density\n"
         << "  " << program << " 100 0.05 0              # 100 nodes, sparse\n"
+        << "  " << program << " --manual                 # prompt for V, source, and edges\n"
+        << "  " << program << " --manual 6 0             # prompt only for the edge list\n"
         << "  " << program << " 50 0.2 3 --json          # JSON for visualizer\n"
         << "  " << program << " 20 0.4 0 --json > graph.json\n";
+}
+
+bool prompt_for_manual_config(int& V, int& source) {
+    std::cerr << "Enter number of vertices: ";
+    if (!(std::cin >> V) || V <= 0) {
+        std::cerr << "Error: number of vertices must be > 0.\n";
+        return false;
+    }
+
+    std::cerr << "Enter BFS source vertex [0, " << V - 1 << "]: ";
+    if (!(std::cin >> source) || source < 0 || source >= V) {
+        std::cerr << "Error: source must be in [0, " << V - 1 << "].\n";
+        return false;
+    }
+
+    return true;
+}
+
+bool read_manual_graph(Graph& graph) {
+    std::cerr << "Enter number of undirected edges: ";
+
+    int edge_count = 0;
+    if (!(std::cin >> edge_count) || edge_count < 0) {
+        std::cerr << "Error: edge count must be a non-negative integer.\n";
+        return false;
+    }
+
+    std::cerr << "Enter edges as pairs: u v\n";
+    std::cerr << "Example: 0 3\n";
+
+    for (int edge_index = 0; edge_index < edge_count; ++edge_index) {
+        int u = -1;
+        int v = -1;
+
+        if (!(std::cin >> u >> v)) {
+            std::cerr << "Error: failed to read edge " << edge_index
+                      << ". Expected two integers.\n";
+            return false;
+        }
+
+        if (!add_undirected_edge(graph, u, v)) {
+            std::cerr << "Error: invalid edge (" << u << ", " << v << ")"
+                      << ". Vertices must be distinct and in [0, "
+                      << graph.num_vertices - 1 << "].\n";
+            return false;
+        }
+    }
+
+    return true;
 }
 
 // Print human-readable results to stdout
@@ -241,9 +284,7 @@ void print_json(const Graph& graph, const std::vector<int>& dist, int source,
     std::cout << "}\n";
 }
 
-// =============================================================================
 // Main — CLI entry point
-// =============================================================================
 
 int main(int argc, char* argv[]) {
     // --- Defaults ---
@@ -252,6 +293,7 @@ int main(int argc, char* argv[]) {
     int      source  = 0;
     uint64_t seed    = 42;
     bool     json    = false;
+    bool     manual  = false;
 
     // --- Parse arguments ---
     std::vector<std::string> positional;
@@ -259,6 +301,8 @@ int main(int argc, char* argv[]) {
         if (std::strcmp(argv[i], "--help") == 0 || std::strcmp(argv[i], "-h") == 0) {
             print_usage(argv[0]);
             return 0;
+        } else if (std::strcmp(argv[i], "--manual") == 0) {
+            manual = true;
         } else if (std::strcmp(argv[i], "--json") == 0) {
             json = true;
         } else if (std::strcmp(argv[i], "--seed") == 0 && i + 1 < argc) {
@@ -269,8 +313,20 @@ int main(int argc, char* argv[]) {
     }
 
     if (positional.size() >= 1) V       = std::stoi(positional[0]);
-    if (positional.size() >= 2) density = std::stod(positional[1]);
-    if (positional.size() >= 3) source  = std::stoi(positional[2]);
+    if (manual) {
+        if (positional.size() == 0) {
+            if (!prompt_for_manual_config(V, source)) {
+                return 1;
+            }
+        } else {
+            if (positional.size() >= 1) V      = std::stoi(positional[0]);
+            if (positional.size() >= 2) source = std::stoi(positional[1]);
+        }
+    } else {
+        if (positional.size() >= 1) V       = std::stoi(positional[0]);
+        if (positional.size() >= 2) density = std::stod(positional[1]);
+        if (positional.size() >= 3) source  = std::stoi(positional[2]);
+    }
 
     // --- Validate inputs ---
     if (V <= 0)      { std::cerr << "Error: V must be > 0\n"; return 1; }
@@ -278,21 +334,32 @@ int main(int argc, char* argv[]) {
         std::cerr << "Error: source must be in [0, " << V - 1 << "]\n";
         return 1;
     }
-    if (density < 0.0 || density > 1.0) {
+    if (!manual && (density < 0.0 || density > 1.0)) {
         std::cerr << "Error: density must be in [0.0, 1.0]\n";
         return 1;
     }
 
-    if (!json) {
-        std::cout << "Generating undirected graph: V=" << V
-                  << ", density=" << density
-                  << ", source=" << source
-                  << ", seed=" << seed << "\n";
-    }
+    Graph graph(V);
 
-    // --- Graph Generation (timed) ---
+    // --- Graph Construction (timed) ---
     auto t0 = std::chrono::high_resolution_clock::now();
-    Graph graph = generate_graph(V, density, seed);
+    if (manual) {
+        if (!json) {
+            std::cout << "Manual graph input mode: V=" << V
+                      << ", source=" << source << "\n";
+        }
+        if (!read_manual_graph(graph)) {
+            return 1;
+        }
+    } else {
+        if (!json) {
+            std::cout << "Generating undirected graph: V=" << V
+                      << ", density=" << density
+                      << ", source=" << source
+                      << ", seed=" << seed << "\n";
+        }
+        graph = generate_graph(V, density, seed);
+    }
     auto t1 = std::chrono::high_resolution_clock::now();
     double gen_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
 
