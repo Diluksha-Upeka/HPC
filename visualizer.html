@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BFS Graph Visualizer</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: #0d1117; color: #c9d1d9;
+    display: flex; flex-direction: column; height: 100vh;
+  }
+
+  /* ---- Top bar ---- */
+  header {
+    background: #161b22; border-bottom: 1px solid #30363d;
+    padding: 12px 24px; display: flex; align-items: center; gap: 18px;
+    flex-wrap: wrap;
+  }
+  header h1 { font-size: 16px; font-weight: 600; white-space: nowrap; }
+  .ctrl { display: flex; align-items: center; gap: 6px; }
+  .ctrl label { font-size: 13px; color: #8b949e; }
+  .ctrl input, .ctrl select {
+    background: #0d1117; border: 1px solid #30363d; border-radius: 6px;
+    color: #c9d1d9; padding: 4px 8px; font-size: 13px; width: 80px;
+  }
+  .ctrl input[type=file] { width: 200px; }
+  button {
+    background: #238636; border: none; border-radius: 6px;
+    color: #fff; padding: 6px 14px; font-size: 13px; cursor: pointer;
+    font-weight: 600;
+  }
+  button:hover { background: #2ea043; }
+  button.secondary { background: #30363d; }
+  button.secondary:hover { background: #484f58; }
+
+  /* ---- Main area ---- */
+  .main { display: flex; flex: 1; overflow: hidden; }
+  canvas { flex: 1; display: block; cursor: grab; }
+  canvas:active { cursor: grabbing; }
+
+  /* ---- Side panel ---- */
+  .panel {
+    width: 300px; background: #161b22; border-left: 1px solid #30363d;
+    overflow-y: auto; padding: 16px; font-size: 13px;
+  }
+  .panel h2 { font-size: 14px; margin-bottom: 8px; color: #58a6ff; }
+  .stat { display: flex; justify-content: space-between; padding: 3px 0; }
+  .stat .val { color: #58a6ff; font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  th, td {
+    text-align: left; padding: 4px 8px;
+    border-bottom: 1px solid #21262d; font-size: 12px;
+  }
+  th { color: #8b949e; position: sticky; top: 0; background: #161b22; }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+  .legend-item { display: flex; align-items: center; gap: 4px; font-size: 12px; }
+  .legend-swatch { width: 14px; height: 14px; border-radius: 3px; }
+  .instructions {
+    background: #0d1117; border: 1px solid #30363d; border-radius: 6px;
+    padding: 12px; margin-top: 12px; font-size: 12px; color: #8b949e;
+    line-height: 1.5;
+  }
+  .instructions code {
+    background: #161b22; padding: 1px 4px; border-radius: 3px; color: #c9d1d9;
+  }
+  #drop-zone {
+    border: 2px dashed #30363d; border-radius: 8px; padding: 32px;
+    text-align: center; color: #484f58; margin: 12px 0;
+    transition: border-color 0.2s;
+  }
+  #drop-zone.hover { border-color: #58a6ff; color: #58a6ff; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>&#x1F50D; BFS Graph Visualizer</h1>
+  <div class="ctrl">
+    <label>Load JSON:</label>
+    <input type="file" id="fileInput" accept=".json">
+  </div>
+  <button class="secondary" id="btnSample">Use Sample Graph</button>
+  <div class="ctrl" id="animCtrl" style="display:none;">
+    <button id="btnAnimate">&#9654; Animate BFS</button>
+    <label>Speed:</label>
+    <input id="speed" type="range" min="1" max="20" value="8" style="width:100px;">
+  </div>
+</header>
+
+<div class="main">
+  <canvas id="canvas"></canvas>
+  <div class="panel">
+    <div id="welcome">
+      <h2>Getting Started</h2>
+      <div id="drop-zone">Drop a JSON file here<br>or use the file picker above</div>
+      <div class="instructions">
+        <strong>Generate JSON from the C++ program:</strong><br><br>
+        <code>graph_bfs.exe 30 0.15 0 --json &gt; graph.json</code><br><br>
+        Then load <code>graph.json</code> here, or click <b>Use Sample Graph</b>
+        to explore a built-in demo.
+      </div>
+    </div>
+    <div id="info" style="display:none;">
+      <h2>Graph Stats</h2>
+      <div class="stat"><span>Vertices</span>   <span class="val" id="sV"></span></div>
+      <div class="stat"><span>Edges</span>      <span class="val" id="sE"></span></div>
+      <div class="stat"><span>Source</span>     <span class="val" id="sS"></span></div>
+      <div class="stat"><span>Reachable</span>  <span class="val" id="sR"></span></div>
+      <div class="stat"><span>Max distance</span><span class="val" id="sD"></span></div>
+      <div class="stat"><span>Graph gen</span>   <span class="val" id="sGt"></span></div>
+      <div class="stat"><span>BFS time</span>    <span class="val" id="sBt"></span></div>
+
+      <h2 style="margin-top:14px;">Color = BFS Distance</h2>
+      <div class="legend" id="legend"></div>
+
+      <h2 style="margin-top:14px;">Distance Table</h2>
+      <div style="max-height:300px;overflow-y:auto;">
+        <table><thead><tr><th>Node</th><th>Dist</th><th>Degree</th></tr></thead>
+        <tbody id="tbody"></tbody></table>
+      </div>
+
+      <h2 style="margin-top:14px;" id="hoverLabel">Hover a node for details</h2>
+      <div id="hoverInfo" style="color:#8b949e;"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ---- Color palette (distance -> color) ----
+const PALETTE = [
+  '#f85149','#f0883e','#d29922','#57ab5a','#39d353',
+  '#2ea043','#3fb950','#58a6ff','#79c0ff','#a5d6ff',
+  '#d2a8ff','#bc8cff','#8957e5','#6e40c9','#e6edf3'
+];
+const UNREACH_COLOR = '#484f58';
+const SOURCE_COLOR  = '#ff7b72';
+const EDGE_COLOR    = 'rgba(48,54,61,0.6)';
+const EDGE_HL_COLOR = '#58a6ff';
+
+let data = null;       // parsed JSON
+let pos  = [];         // node positions {x,y}
+let cam  = { x:0, y:0, zoom:1 }; // camera
+let drag = null;       // {startX, startY, camX, camY}
+let hovered = -1;
+let animStep = -1;     // -1 = not animating, 0..max = current BFS level shown
+
+// ---- Canvas setup ----
+const canvas = document.getElementById('canvas');
+const ctx    = canvas.getContext('2d');
+
+function resize() {
+  canvas.width  = canvas.clientWidth  * devicePixelRatio;
+  canvas.height = canvas.clientHeight * devicePixelRatio;
+  draw();
+}
+window.addEventListener('resize', resize);
+
+// ---- File loading ----
+document.getElementById('fileInput').addEventListener('change', e => {
+  const file = e.target.files[0]; if (!file) return;
+  file.text().then(t => loadData(JSON.parse(t)));
+});
+
+// Drag & drop
+const dz = document.getElementById('drop-zone');
+document.body.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('hover'); });
+document.body.addEventListener('dragleave', () => dz.classList.remove('hover'));
+document.body.addEventListener('drop', e => {
+  e.preventDefault(); dz.classList.remove('hover');
+  const file = e.dataTransfer.files[0]; if (!file) return;
+  file.text().then(t => loadData(JSON.parse(t)));
+});
+
+// Sample graph button
+document.getElementById('btnSample').addEventListener('click', () => {
+  loadData(sampleData());
+});
+
+function sampleData() {
+  // Small hand-crafted graph for demo
+  const V = 20; const src = 0;
+  const edges = [
+    [0,1],[0,2],[0,3],[1,4],[1,5],[2,5],[2,6],[3,6],[3,7],
+    [4,8],[5,8],[5,9],[6,9],[6,10],[7,10],[7,11],
+    [8,12],[9,12],[9,13],[10,13],[10,14],[11,14],
+    [12,15],[13,15],[13,16],[14,16],[14,17],
+    [15,18],[16,18],[16,19],[17,19]
+  ];
+  // BFS from 0
+  const adj = Array.from({length:V}, () => []);
+  for (const [u,v] of edges) { adj[u].push(v); adj[v].push(u); }
+  const dist = Array(V).fill(-1); dist[src] = 0;
+  const q = [src];
+  while (q.length) {
+    const u = q.shift();
+    for (const v of adj[u]) {
+      if (dist[v] === -1) { dist[v] = dist[u]+1; q.push(v); }
+    }
+  }
+  return { vertices: V, edges: edges.length, source: src,
+           gen_ms: 0, bfs_ms: 0, edge_list: edges, distance: dist };
+}
+
+// ---- Load & layout ----
+function loadData(d) {
+  data = d;
+  layoutForceDirected();
+  animStep = -1;
+  document.getElementById('welcome').style.display = 'none';
+  document.getElementById('info').style.display = '';
+  document.getElementById('animCtrl').style.display = 'flex';
+  fillStats();
+  cam = { x:0, y:0, zoom:1 };
+  resize();
+}
+
+// Simple force-directed layout (runs synchronously — fine for ≤ a few thousand nodes)
+function layoutForceDirected() {
+  const V = data.vertices;
+  pos = Array.from({length: V}, () => ({
+    x: (Math.random()-0.5)*600,
+    y: (Math.random()-0.5)*600,
+    vx: 0, vy: 0
+  }));
+  const adj = Array.from({length:V}, ()=>[]);
+  for (const [u,v] of data.edge_list) { adj[u].push(v); adj[v].push(u); }
+
+  const ITERS = Math.min(300, 80 + V * 2);
+  const REPULSE = 8000;
+  const SPRING = 0.005;
+  const IDEAL = 60;
+  const DAMP = 0.9;
+  const DT = 0.4;
+
+  for (let iter = 0; iter < ITERS; iter++) {
+    // Repulsion (all pairs — use grid for large graphs)
+    for (let i = 0; i < V; i++) {
+      for (let j = i+1; j < V; j++) {
+        let dx = pos[i].x - pos[j].x;
+        let dy = pos[i].y - pos[j].y;
+        let d2 = dx*dx + dy*dy + 1;
+        let f = REPULSE / d2;
+        let fx = f*dx, fy = f*dy;
+        pos[i].vx += fx; pos[i].vy += fy;
+        pos[j].vx -= fx; pos[j].vy -= fy;
+      }
+    }
+    // Springs (edges)
+    for (const [u,v] of data.edge_list) {
+      let dx = pos[v].x - pos[u].x;
+      let dy = pos[v].y - pos[u].y;
+      let d = Math.sqrt(dx*dx + dy*dy) + 0.1;
+      let f = SPRING * (d - IDEAL);
+      let fx = f*dx/d, fy = f*dy/d;
+      pos[u].vx += fx; pos[u].vy += fy;
+      pos[v].vx -= fx; pos[v].vy -= fy;
+    }
+    // Integrate
+    for (let i = 0; i < V; i++) {
+      pos[i].vx *= DAMP; pos[i].vy *= DAMP;
+      pos[i].x += pos[i].vx * DT;
+      pos[i].y += pos[i].vy * DT;
+    }
+  }
+}
+
+// ---- Stats panel ----
+function fillStats() {
+  const d = data;
+  document.getElementById('sV').textContent = d.vertices;
+  document.getElementById('sE').textContent = d.edges;
+  document.getElementById('sS').textContent = d.source;
+  const reachable = d.distance.filter(x => x >= 0).length;
+  document.getElementById('sR').textContent = reachable + '/' + d.vertices;
+  const maxD = Math.max(...d.distance);
+  document.getElementById('sD').textContent = maxD >= 0 ? maxD : 'N/A';
+  document.getElementById('sGt').textContent = d.gen_ms.toFixed(2) + ' ms';
+  document.getElementById('sBt').textContent = d.bfs_ms.toFixed(2) + ' ms';
+
+  // Legend
+  const leg = document.getElementById('legend');
+  leg.innerHTML = '';
+  for (let i = 0; i <= maxD && i < PALETTE.length; i++) {
+    leg.innerHTML += `<span class="legend-item"><span class="legend-swatch" style="background:${distColor(i)}"></span>${i}</span>`;
+  }
+  leg.innerHTML += `<span class="legend-item"><span class="legend-swatch" style="background:${UNREACH_COLOR}"></span>unreach</span>`;
+
+  // Table
+  const tb = document.getElementById('tbody');
+  tb.innerHTML = '';
+  const adj = buildAdj();
+  for (let v = 0; v < d.vertices; v++) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${v}</td><td>${d.distance[v] === -1 ? '∞' : d.distance[v]}</td><td>${adj[v].length}</td>`;
+    tb.appendChild(tr);
+  }
+}
+
+function buildAdj() {
+  const adj = Array.from({length:data.vertices}, ()=>[]);
+  for (const [u,v] of data.edge_list) { adj[u].push(v); adj[v].push(u); }
+  return adj;
+}
+
+function distColor(d) {
+  if (d < 0) return UNREACH_COLOR;
+  return PALETTE[d % PALETTE.length];
+}
+
+// ---- Drawing ----
+function draw() {
+  if (!data) return;
+  const W = canvas.width, H = canvas.height;
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.clearRect(0,0,W,H);
+
+  const dpr = devicePixelRatio;
+  ctx.setTransform(dpr*cam.zoom, 0, 0, dpr*cam.zoom,
+                   W/2 + cam.x*dpr*cam.zoom,
+                   H/2 + cam.y*dpr*cam.zoom);
+
+  const maxDist = Math.max(...data.distance);
+  const adj = buildAdj();
+
+  // Edges
+  ctx.lineWidth = 1.2 / cam.zoom;
+  for (const [u,v] of data.edge_list) {
+    const show = animStep < 0 ||
+      (data.distance[u] <= animStep && data.distance[v] <= animStep);
+    if (!show) continue;
+    const hl = hovered >= 0 && (u === hovered || v === hovered);
+    ctx.strokeStyle = hl ? EDGE_HL_COLOR : EDGE_COLOR;
+    ctx.beginPath();
+    ctx.moveTo(pos[u].x, pos[u].y);
+    ctx.lineTo(pos[v].x, pos[v].y);
+    ctx.stroke();
+  }
+
+  // Nodes
+  const R = Math.max(4, 10 / Math.sqrt(data.vertices));
+  for (let i = 0; i < data.vertices; i++) {
+    const d = data.distance[i];
+    if (animStep >= 0 && d > animStep) continue;
+    const isSource = (i === data.source);
+    ctx.beginPath();
+    ctx.arc(pos[i].x, pos[i].y, isSource ? R*1.4 : R, 0, Math.PI*2);
+    ctx.fillStyle = distColor(d);
+    if (i === hovered) ctx.fillStyle = '#e6edf3';
+    ctx.fill();
+    if (isSource) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 2/cam.zoom; ctx.stroke(); }
+  }
+
+  // Labels (only for small graphs)
+  if (data.vertices <= 100) {
+    ctx.fillStyle = '#0d1117';
+    ctx.font = `bold ${Math.max(8, 11/cam.zoom)}px sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    for (let i = 0; i < data.vertices; i++) {
+      if (animStep >= 0 && data.distance[i] > animStep) continue;
+      ctx.fillText(i, pos[i].x, pos[i].y);
+    }
+  }
+}
+
+// ---- Interaction ----
+canvas.addEventListener('mousedown', e => {
+  drag = { startX: e.clientX, startY: e.clientY, camX: cam.x, camY: cam.y };
+});
+window.addEventListener('mousemove', e => {
+  if (drag) {
+    cam.x = drag.camX + (e.clientX - drag.startX) / cam.zoom;
+    cam.y = drag.camY + (e.clientY - drag.startY) / cam.zoom;
+    draw();
+    return;
+  }
+  if (!data) return;
+  // Hit test
+  const rect = canvas.getBoundingClientRect();
+  const mx = (e.clientX - rect.left - rect.width/2) / cam.zoom - cam.x;
+  const my = (e.clientY - rect.top  - rect.height/2) / cam.zoom - cam.y;
+  let closest = -1, bestD = 15 / cam.zoom;
+  for (let i = 0; i < data.vertices; i++) {
+    const dx = pos[i].x - mx, dy = pos[i].y - my;
+    const d = Math.sqrt(dx*dx+dy*dy);
+    if (d < bestD) { bestD = d; closest = i; }
+  }
+  if (closest !== hovered) {
+    hovered = closest;
+    updateHover();
+    draw();
+  }
+});
+window.addEventListener('mouseup', () => { drag = null; });
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  const factor = e.deltaY < 0 ? 1.12 : 0.89;
+  cam.zoom = Math.max(0.1, Math.min(20, cam.zoom * factor));
+  draw();
+}, {passive:false});
+
+function updateHover() {
+  const el = document.getElementById('hoverInfo');
+  const lbl = document.getElementById('hoverLabel');
+  if (hovered < 0) {
+    lbl.textContent = 'Hover a node for details';
+    el.textContent = '';
+    return;
+  }
+  const d = data.distance[hovered];
+  const adj = buildAdj();
+  lbl.textContent = `Node ${hovered}`;
+  el.innerHTML = `Distance: <b>${d === -1 ? '∞' : d}</b><br>` +
+    `Degree: <b>${adj[hovered].length}</b><br>` +
+    `Neighbors: ${adj[hovered].join(', ')}`;
+}
+
+// ---- BFS Animation ----
+let animTimer = null;
+document.getElementById('btnAnimate').addEventListener('click', () => {
+  if (!data) return;
+  if (animTimer) { stopAnim(); return; }
+  const maxD = Math.max(...data.distance);
+  animStep = -1;
+  document.getElementById('btnAnimate').textContent = '⏹ Stop';
+  animTimer = setInterval(() => {
+    animStep++;
+    if (animStep > maxD) { stopAnim(); return; }
+    draw();
+  }, 1200 / (+document.getElementById('speed').value || 8));
+});
+
+function stopAnim() {
+  clearInterval(animTimer);
+  animTimer = null;
+  animStep = -1;
+  document.getElementById('btnAnimate').textContent = '▶ Animate BFS';
+  draw();
+}
+
+resize();
+</script>
+</body>
+</html>
