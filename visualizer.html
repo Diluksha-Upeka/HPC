@@ -5,72 +5,150 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>BFS Graph Visualizer</title>
 <style>
+  :root {
+    --bg: #f6f8fb;
+    --bg-soft: #ffffff;
+    --panel: #fcfdff;
+    --border: #d6deea;
+    --border-strong: #b7c4d8;
+    --text: #1f2a37;
+    --muted: #5c6b7a;
+    --accent: #0b6bcb;
+    --accent-soft: #d9ebff;
+    --button: #0b6bcb;
+    --button-hover: #0958a8;
+    --edge: rgba(94, 122, 154, 0.45);
+    --edge-highlight: #0b6bcb;
+    --unreachable: #8b97a8;
+    --source-ring: #0f172a;
+    --drop-bg: #f2f7ff;
+    --error-bg: #fff1f0;
+    --error-border: #f3b0aa;
+    --error-text: #9f2d20;
+  }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
     font-family: 'Segoe UI', system-ui, sans-serif;
-    background: #0d1117; color: #c9d1d9;
+    background: radial-gradient(circle at top left, #ffffff 0%, #eef5ff 45%, #eaf0f7 100%);
+    color: var(--text);
     display: flex; flex-direction: column; height: 100vh;
   }
 
   /* ---- Top bar ---- */
   header {
-    background: #161b22; border-bottom: 1px solid #30363d;
+    background: rgba(255, 255, 255, 0.92); border-bottom: 1px solid var(--border);
     padding: 12px 24px; display: flex; align-items: center; gap: 18px;
     flex-wrap: wrap;
+    backdrop-filter: blur(8px);
   }
   header h1 { font-size: 16px; font-weight: 600; white-space: nowrap; }
   .ctrl { display: flex; align-items: center; gap: 6px; }
-  .ctrl label { font-size: 13px; color: #8b949e; }
+  .ctrl label { font-size: 13px; color: var(--muted); }
   .ctrl input, .ctrl select {
-    background: #0d1117; border: 1px solid #30363d; border-radius: 6px;
-    color: #c9d1d9; padding: 4px 8px; font-size: 13px; width: 80px;
+    background: var(--bg-soft); border: 1px solid var(--border); border-radius: 8px;
+    color: var(--text); padding: 4px 8px; font-size: 13px; width: 80px;
   }
   .ctrl input[type=file] { width: 200px; }
   button {
-    background: #238636; border: none; border-radius: 6px;
+    background: var(--button); border: none; border-radius: 8px;
     color: #fff; padding: 6px 14px; font-size: 13px; cursor: pointer;
     font-weight: 600;
+    box-shadow: 0 8px 16px rgba(11, 107, 203, 0.16);
   }
-  button:hover { background: #2ea043; }
-  button.secondary { background: #30363d; }
-  button.secondary:hover { background: #484f58; }
+  button:hover { background: var(--button-hover); }
+  button.secondary {
+    background: var(--bg-soft); color: var(--text); border: 1px solid var(--border);
+    box-shadow: none;
+  }
+  button.secondary:hover { background: #eef4fb; }
 
   /* ---- Main area ---- */
   .main { display: flex; flex: 1; overflow: hidden; }
-  canvas { flex: 1; display: block; cursor: grab; }
+  canvas {
+    flex: 1; display: block; cursor: grab;
+    background: linear-gradient(180deg, rgba(255,255,255,0.9) 0%, rgba(240,246,255,0.95) 100%);
+  }
   canvas:active { cursor: grabbing; }
 
   /* ---- Side panel ---- */
   .panel {
-    width: 300px; background: #161b22; border-left: 1px solid #30363d;
-    overflow-y: auto; padding: 16px; font-size: 13px;
+    width: 360px; background: rgba(252, 253, 255, 0.96); border-left: 1px solid var(--border);
+    overflow-y: auto; padding: 20px; font-size: 13px;
+    box-shadow: -12px 0 24px rgba(77, 98, 120, 0.08);
   }
-  .panel h2 { font-size: 14px; margin-bottom: 8px; color: #58a6ff; }
-  .stat { display: flex; justify-content: space-between; padding: 3px 0; }
-  .stat .val { color: #58a6ff; font-weight: 600; }
-  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  .panel h2 { 
+    font-size: 15px; margin-bottom: 12px; margin-top: 20px; 
+    color: var(--text); border-bottom: 2px solid var(--accent-soft); 
+    padding-bottom: 4px; font-weight: 600; 
+  }
+  .panel h2:first-child { margin-top: 0; }
+  .stat { 
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 10px; background: #ffffff; 
+    border: 1px solid var(--border); margin-bottom: 4px; border-radius: 8px; 
+  }
+  .stat span:first-child { color: var(--muted); font-weight: 500; }
+  .stat .val { 
+    color: var(--accent); font-weight: 700; 
+    background: var(--drop-bg); padding: 4px 10px; 
+    border-radius: 12px; font-size: 12px;
+  }
+  table { width: 100%; border-collapse: separate; border-spacing: 0; margin-top: 8px; }
   th, td {
-    text-align: left; padding: 4px 8px;
-    border-bottom: 1px solid #21262d; font-size: 12px;
+    text-align: left; padding: 6px 10px;
+    border-bottom: 1px solid var(--border); font-size: 12px;
   }
-  th { color: #8b949e; position: sticky; top: 0; background: #161b22; }
+  th { color: var(--muted); position: sticky; top: 0; background: var(--panel); font-weight: 600; }
+  tbody tr:hover { background: var(--drop-bg); }
   .legend { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
   .legend-item { display: flex; align-items: center; gap: 4px; font-size: 12px; }
   .legend-swatch { width: 14px; height: 14px; border-radius: 3px; }
   .instructions {
-    background: #0d1117; border: 1px solid #30363d; border-radius: 6px;
-    padding: 12px; margin-top: 12px; font-size: 12px; color: #8b949e;
+    background: var(--drop-bg); border: 1px solid var(--border); border-radius: 12px;
+    padding: 12px; margin-top: 12px; font-size: 12px; color: var(--muted);
     line-height: 1.5;
   }
   .instructions code {
-    background: #161b22; padding: 1px 4px; border-radius: 3px; color: #c9d1d9;
+    background: #ffffff; padding: 1px 4px; border-radius: 3px; color: var(--text);
   }
   #drop-zone {
-    border: 2px dashed #30363d; border-radius: 8px; padding: 32px;
-    text-align: center; color: #484f58; margin: 12px 0;
-    transition: border-color 0.2s;
+    border: 2px dashed var(--border-strong); border-radius: 14px; padding: 32px;
+    text-align: center; color: var(--muted); margin: 12px 0;
+    transition: border-color 0.2s, background 0.2s, color 0.2s;
+    background: rgba(255,255,255,0.75);
   }
-  #drop-zone.hover { border-color: #58a6ff; color: #58a6ff; }
+  #drop-zone.hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+  #status {
+    margin-top: 12px; padding: 10px 12px; border-radius: 10px;
+    border: 1px solid var(--border); background: #ffffff; color: var(--muted);
+    min-height: 42px;
+  }
+  #status.error {
+    background: var(--error-bg); border-color: var(--error-border); color: var(--error-text);
+  }
+  .callout {
+    background: var(--bg-soft);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.02);
+  }
+  .callout .stat {
+    border-color: transparent;
+    background: var(--drop-bg);
+  }
+  .callout .stat .val {
+    background: #ffffff;
+    border: 1px solid var(--border);
+  }
+  .callout-note {
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px dashed var(--border);
+    color: var(--text);
+    font-size: 12px;
+    line-height: 1.5;
+  }
 </style>
 </head>
 <body>
@@ -87,6 +165,10 @@
     <label>Speed:</label>
     <input id="speed" type="range" min="1" max="20" value="8" style="width:100px;">
   </div>
+  <div class="ctrl" id="labelCtrl" style="display:none;">
+    <label for="showLabels">Labels</label>
+    <input id="showLabels" type="checkbox" checked style="width:auto;">
+  </div>
 </header>
 
 <div class="main">
@@ -101,18 +183,35 @@
         Then load <code>graph.json</code> here, or click <b>Use Sample Graph</b>
         to explore a built-in demo.
       </div>
+      <div id="status">Load a JSON file or click Use Sample Graph.</div>
     </div>
     <div id="info" style="display:none;">
-      <h2>Graph Stats</h2>
-      <div class="stat"><span>Vertices</span>   <span class="val" id="sV"></span></div>
-      <div class="stat"><span>Edges</span>      <span class="val" id="sE"></span></div>
-      <div class="stat"><span>Source</span>     <span class="val" id="sS"></span></div>
-      <div class="stat"><span>Reachable</span>  <span class="val" id="sR"></span></div>
-      <div class="stat"><span>Max distance</span><span class="val" id="sD"></span></div>
-      <div class="stat"><span>Graph gen</span>   <span class="val" id="sGt"></span></div>
-      <div class="stat"><span>BFS time</span>    <span class="val" id="sBt"></span></div>
+      <h2>Graph Overview</h2>
+      <div class="callout" style="padding: 8px;">
+        <div class="stat"><span>Vertices</span>   <span class="val" id="sV"></span></div>
+        <div class="stat"><span>Edges</span>      <span class="val" id="sE"></span></div>
+        <div class="stat"><span>Source</span>     <span class="val" id="sS"></span></div>
+        <div class="stat"><span>Reachable</span>  <span class="val" id="sR"></span></div>
+        <div class="stat"><span>Max distance</span><span class="val" id="sD"></span></div>
+      </div>
 
-      <h2 style="margin-top:14px;">Color = BFS Distance</h2>
+      <h2>Execution Metrics</h2>
+      <div class="callout">
+        <div class="stat"><span>Graph struct</span>   <span class="val" id="sGt"></span></div>
+        <div class="stat"><span>BFS traversal</span>    <span class="val" id="sBt"></span></div>
+        <div class="stat"><span>Total time</span><span class="val" id="timeTotal"></span></div>
+        <div class="callout-note" id="timeExplain">Measured inside C++ engine.</div>
+      </div>
+
+      <h2>BFS Animation</h2>
+      <div class="callout">
+        <div class="stat"><span>Current level</span><span class="val" id="bfsLevel">all levels</span></div>
+        <div class="stat"><span>Visited nodes</span><span class="val" id="bfsVisited"></span></div>
+        <div class="stat"><span>Frontier size</span><span class="val" id="bfsFrontier"></span></div>
+        <div class="callout-note" id="bfsExplain">Press 'Animate BFS' to see the layer-by-layer traversal.</div>
+      </div>
+
+      <h2>Distance Legend</h2>
       <div class="legend" id="legend"></div>
 
       <h2 style="margin-top:14px;">Distance Table</h2>
@@ -121,8 +220,10 @@
         <tbody id="tbody"></tbody></table>
       </div>
 
-      <h2 style="margin-top:14px;" id="hoverLabel">Hover a node for details</h2>
-      <div id="hoverInfo" style="color:#8b949e;"></div>
+      <h2 style="margin-top:14px;" id="hoverLabel">Hover Details</h2>
+      <div id="hoverInfo" class="callout" style="min-height: 80px; color:#8b949e; display:flex; align-items:center; justify-content:center; text-align:center;">
+        Hover over a node to see its details
+      </div>
     </div>
   </div>
 </div>
@@ -136,8 +237,8 @@ const PALETTE = [
 ];
 const UNREACH_COLOR = '#484f58';
 const SOURCE_COLOR  = '#ff7b72';
-const EDGE_COLOR    = 'rgba(48,54,61,0.6)';
-const EDGE_HL_COLOR = '#58a6ff';
+const EDGE_COLOR    = getCssVar('--edge');
+const EDGE_HL_COLOR = getCssVar('--edge-highlight');
 
 let data = null;       // parsed JSON
 let pos  = [];         // node positions {x,y}
@@ -145,10 +246,42 @@ let cam  = { x:0, y:0, zoom:1 }; // camera
 let drag = null;       // {startX, startY, camX, camY}
 let hovered = -1;
 let animStep = -1;     // -1 = not animating, 0..max = current BFS level shown
+let showLabels = true;
 
 // ---- Canvas setup ----
 const canvas = document.getElementById('canvas');
 const ctx    = canvas.getContext('2d');
+const statusEl = document.getElementById('status');
+const labelToggleEl = document.getElementById('showLabels');
+
+function getCssVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+function setStatus(message, isError = false) {
+  if (!statusEl) return;
+  statusEl.textContent = message;
+  statusEl.className = isError ? 'error' : '';
+}
+
+function validateData(d) {
+  if (!d || typeof d !== 'object') throw new Error('JSON root must be an object.');
+  if (!Number.isInteger(d.vertices) || d.vertices <= 0) throw new Error('Missing or invalid "vertices" value.');
+  if (!Array.isArray(d.edge_list)) throw new Error('Missing "edge_list" array.');
+  if (!Array.isArray(d.distance) || d.distance.length !== d.vertices) throw new Error('"distance" must be an array with one entry per vertex.');
+  if (!Number.isInteger(d.source) || d.source < 0 || d.source >= d.vertices) throw new Error('Missing or invalid "source" value.');
+}
+
+function parseAndLoadText(text, label) {
+  try {
+    const parsed = JSON.parse(text);
+    validateData(parsed);
+    loadData(parsed);
+    setStatus(`Loaded ${label} successfully.`);
+  } catch (error) {
+    setStatus(`Failed to load ${label}: ${error.message}`, true);
+  }
+}
 
 function resize() {
   canvas.width  = canvas.clientWidth  * devicePixelRatio;
@@ -160,7 +293,7 @@ window.addEventListener('resize', resize);
 // ---- File loading ----
 document.getElementById('fileInput').addEventListener('change', e => {
   const file = e.target.files[0]; if (!file) return;
-  file.text().then(t => loadData(JSON.parse(t)));
+  file.text().then(t => parseAndLoadText(t, file.name));
 });
 
 // Drag & drop
@@ -170,12 +303,18 @@ document.body.addEventListener('dragleave', () => dz.classList.remove('hover'));
 document.body.addEventListener('drop', e => {
   e.preventDefault(); dz.classList.remove('hover');
   const file = e.dataTransfer.files[0]; if (!file) return;
-  file.text().then(t => loadData(JSON.parse(t)));
+  file.text().then(t => parseAndLoadText(t, file.name));
 });
 
 // Sample graph button
 document.getElementById('btnSample').addEventListener('click', () => {
   loadData(sampleData());
+  setStatus('Loaded built-in sample graph.');
+});
+
+labelToggleEl.addEventListener('change', () => {
+  showLabels = labelToggleEl.checked;
+  draw();
 });
 
 function sampleData() {
@@ -211,8 +350,11 @@ function loadData(d) {
   document.getElementById('welcome').style.display = 'none';
   document.getElementById('info').style.display = '';
   document.getElementById('animCtrl').style.display = 'flex';
+  document.getElementById('labelCtrl').style.display = 'flex';
   fillStats();
   cam = { x:0, y:0, zoom:1 };
+  hovered = -1;
+  updateBfsPanel();
   resize();
 }
 
@@ -276,8 +418,11 @@ function fillStats() {
   document.getElementById('sR').textContent = reachable + '/' + d.vertices;
   const maxD = Math.max(...d.distance);
   document.getElementById('sD').textContent = maxD >= 0 ? maxD : 'N/A';
-  document.getElementById('sGt').textContent = d.gen_ms.toFixed(2) + ' ms';
-  document.getElementById('sBt').textContent = d.bfs_ms.toFixed(2) + ' ms';
+  document.getElementById('sGt').textContent = d.gen_ms.toFixed(4) + ' ms';
+  document.getElementById('sBt').textContent = d.bfs_ms.toFixed(4) + ' ms';
+  document.getElementById('timeTotal').textContent = (d.gen_ms + d.bfs_ms).toFixed(4) + ' ms';
+  document.getElementById('timeExplain').textContent =
+    `The measured BFS pass itself took ${d.bfs_ms.toFixed(4)} ms. This is the serial baseline for future parallel runs.`;
 
   // Legend
   const leg = document.getElementById('legend');
@@ -298,6 +443,68 @@ function fillStats() {
   }
 }
 
+function updateBfsPanel() {
+  if (!data) return;
+  const distances = data.distance;
+  const maxDist = Math.max(...distances);
+  let visited = 0;
+  let frontier = 0;
+  let levelText = 'all levels';
+  let explain = 'BFS starts at the source, then expands level by level. Each color represents a hop distance from the source vertex.';
+
+  if (animStep >= 0) {
+    levelText = `level ${animStep}`;
+    visited = distances.filter(d => d >= 0 && d <= animStep).length;
+    frontier = distances.filter(d => d === animStep).length;
+    explain = frontier > 0
+      ? `The current frontier contains nodes exactly ${animStep} hop(s) away from the source. After this level, BFS advances to the next ring of neighbors.`
+      : `No nodes remain at this level. The BFS traversal has finished exploring all reachable vertices.`;
+  } else {
+    visited = distances.filter(d => d >= 0).length;
+    frontier = maxDist >= 0 ? distances.filter(d => d === maxDist).length : 0;
+    explain = `This result contains ${visited} reachable node(s). Click Animate BFS to replay how the frontier expands from the source.`;
+  }
+
+  document.getElementById('bfsLevel').textContent = levelText;
+  document.getElementById('bfsVisited').textContent = `${visited}/${data.vertices}`;
+  document.getElementById('bfsFrontier').textContent = frontier;
+  document.getElementById('bfsExplain').textContent = explain;
+}
+
+function drawLabel(text, x, y, radius) {
+  const fontSize = Math.max(10, 12 / cam.zoom);
+  const paddingX = 5 / cam.zoom;
+  const paddingY = 3 / cam.zoom;
+  ctx.font = `${fontSize}px sans-serif`;
+  const width = ctx.measureText(text).width + paddingX * 2;
+  const height = fontSize + paddingY * 2;
+  const left = x - width / 2;
+  const top = y - radius - height - 6 / cam.zoom;
+  const round = 6 / cam.zoom;
+
+  ctx.beginPath();
+  ctx.moveTo(left + round, top);
+  ctx.lineTo(left + width - round, top);
+  ctx.quadraticCurveTo(left + width, top, left + width, top + round);
+  ctx.lineTo(left + width, top + height - round);
+  ctx.quadraticCurveTo(left + width, top + height, left + width - round, top + height);
+  ctx.lineTo(left + round, top + height);
+  ctx.quadraticCurveTo(left, top + height, left, top + height - round);
+  ctx.lineTo(left, top + round);
+  ctx.quadraticCurveTo(left, top, left + round, top);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(255,255,255,0.92)';
+  ctx.strokeStyle = 'rgba(140, 157, 179, 0.85)';
+  ctx.lineWidth = 1 / cam.zoom;
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = '#122033';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, x, top + height / 2);
+}
+
 function buildAdj() {
   const adj = Array.from({length:data.vertices}, ()=>[]);
   for (const [u,v] of data.edge_list) { adj[u].push(v); adj[v].push(u); }
@@ -305,7 +512,7 @@ function buildAdj() {
 }
 
 function distColor(d) {
-  if (d < 0) return UNREACH_COLOR;
+  if (d < 0) return getCssVar('--unreachable');
   return PALETTE[d % PALETTE.length];
 }
 
@@ -320,9 +527,6 @@ function draw() {
   ctx.setTransform(dpr*cam.zoom, 0, 0, dpr*cam.zoom,
                    W/2 + cam.x*dpr*cam.zoom,
                    H/2 + cam.y*dpr*cam.zoom);
-
-  const maxDist = Math.max(...data.distance);
-  const adj = buildAdj();
 
   // Edges
   ctx.lineWidth = 1.2 / cam.zoom;
@@ -347,19 +551,16 @@ function draw() {
     ctx.beginPath();
     ctx.arc(pos[i].x, pos[i].y, isSource ? R*1.4 : R, 0, Math.PI*2);
     ctx.fillStyle = distColor(d);
-    if (i === hovered) ctx.fillStyle = '#e6edf3';
+    if (i === hovered) ctx.fillStyle = '#111827';
     ctx.fill();
-    if (isSource) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 2/cam.zoom; ctx.stroke(); }
+    if (isSource) { ctx.strokeStyle = getCssVar('--source-ring'); ctx.lineWidth = 2/cam.zoom; ctx.stroke(); }
   }
 
-  // Labels (only for small graphs)
-  if (data.vertices <= 100) {
-    ctx.fillStyle = '#0d1117';
-    ctx.font = `bold ${Math.max(8, 11/cam.zoom)}px sans-serif`;
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  // Labels
+  if (showLabels && data.vertices <= 250) {
     for (let i = 0; i < data.vertices; i++) {
       if (animStep >= 0 && data.distance[i] > animStep) continue;
-      ctx.fillText(i, pos[i].x, pos[i].y);
+      drawLabel(String(i), pos[i].x, pos[i].y, i === data.source ? R * 1.4 : R);
     }
   }
 }
@@ -422,11 +623,14 @@ document.getElementById('btnAnimate').addEventListener('click', () => {
   if (!data) return;
   if (animTimer) { stopAnim(); return; }
   const maxD = Math.max(...data.distance);
-  animStep = -1;
+  animStep = 0;
+  updateBfsPanel();
+  draw();
   document.getElementById('btnAnimate').textContent = '⏹ Stop';
   animTimer = setInterval(() => {
     animStep++;
     if (animStep > maxD) { stopAnim(); return; }
+    updateBfsPanel();
     draw();
   }, 1200 / (+document.getElementById('speed').value || 8));
 });
@@ -436,6 +640,7 @@ function stopAnim() {
   animTimer = null;
   animStep = -1;
   document.getElementById('btnAnimate').textContent = '▶ Animate BFS';
+  updateBfsPanel();
   draw();
 }
 
