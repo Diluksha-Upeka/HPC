@@ -1,5 +1,17 @@
+# Compiled binaries (Windows)
 *.exe
-*.json
-*.txt
+
+# Compiled binaries (Linux / WSL)
 graph_bfs
 graph_bfs_omp
+graph_bfs_mpi
+
+# Generated visualizer output
+graph.json
+
+# Build artifacts
+*.o
+*.out
+
+# VSCode
+.vscode/
