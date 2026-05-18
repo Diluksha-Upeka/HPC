@@ -1,16 +1,22 @@
-# HPC Graph BFS Baseline
+# HPC Graph BFS — Serial, OpenMP & MPI
 
-This project provides a foundational C++ graph-processing baseline for future HPC work. It includes:
+Parallel implementation of Breadth-First Search (BFS) using shared and distributed memory models for EC7207 High Performance Computing.
+
+This project includes:
 
 - an undirected graph stored as an adjacency list,
 - synthetic graph generation with configurable vertex count and edge density,
-- a serial Breadth-First Search (BFS) implementation,
+- a **serial** BFS baseline implementation,
+- a **shared-memory parallel** BFS using OpenMP,
+- a **distributed-memory parallel** BFS using MPI,
 - manual graph input mode for correctness demos,
 - JSON output for a lightweight HTML visualizer.
 
 ## Repository Contents
 
-- `graph_bfs.cpp` - main C++ program
+- `graph_bfs.cpp` - serial BFS baseline
+- `graph_bfs_omp.cpp` - OpenMP parallel BFS (shared memory)
+- `graph_bfs_mpi.cpp` - MPI parallel BFS (distributed memory)
 - `visualizer.html` - browser-based graph/BFS visualizer
 - `demo.ps1` - standard demo script for evaluation/presentation
 - `demo_manual_input.txt` - sample manual graph input used by the demo
@@ -20,15 +26,36 @@ This project provides a foundational C++ graph-processing baseline for future HP
 On Windows, this project expects a C++17 compiler. The current setup uses MSYS2 MinGW:
 
 - `C:\msys64\ucrt64\bin\g++.exe`
+- MPI: MS-MPI or MSYS2 `mingw-w64-ucrt-x86_64-msmpi`
 
-If that compiler directory is not already in `PATH`, `demo.ps1` adds it for the current PowerShell session.
+On Linux / HPC cluster:
+
+- `g++` (GCC 7+), `mpicxx`, and optionally OpenMP support
 
 ## Build
 
-From `F:\PROJECTS\HPC`:
+### Serial
 
 ```powershell
 g++ -std=c++17 -O2 -Wall -Wextra -o graph_bfs.exe graph_bfs.cpp
+```
+
+### OpenMP
+
+```powershell
+g++ -std=c++17 -O2 -Wall -Wextra -fopenmp -o graph_bfs_omp.exe graph_bfs_omp.cpp
+```
+
+### MPI
+
+```bash
+# Linux / HPC cluster
+mpicxx -std=c++17 -O2 -Wall -Wextra -o graph_bfs_mpi graph_bfs_mpi.cpp
+```
+
+```powershell
+# Windows (MS-MPI)
+g++ -std=c++17 -O2 -Wall -Wextra -I"$env:MSMPI_INC" -o graph_bfs_mpi.exe graph_bfs_mpi.cpp -L"$env:MSMPI_LIB64" -lmsmpi
 ```
 
 ## Standard Way To Demonstrate The Project
@@ -155,10 +182,50 @@ The program reports:
 - number of reachable vertices,
 - generation and BFS timings.
 
+## MPI BFS
+
+### Running
+
+```bash
+# 4 MPI processes, 1000 vertices, 1% density, BFS from node 0
+mpiexec -n 4 ./graph_bfs_mpi 1000 0.01 0
+
+# With correctness verification against serial BFS
+mpiexec -n 4 ./graph_bfs_mpi 1000 0.01 0 --verify
+
+# JSON output for visualizer
+mpiexec -n 1 ./graph_bfs_mpi 30 0.15 0 --json > graph.json
+```
+
+### How It Works
+
+The MPI version uses a **level-synchronous** approach with **block vertex partitioning**:
+
+1. All ranks generate the same graph (identical seed).
+2. Vertices are block-partitioned: rank `r` owns `[r*V/P, (r+1)*V/P)`.
+3. At each BFS level, all ranks expand the shared frontier but only claim
+   unvisited neighbours within their owned range — no conflicts.
+4. `MPI_Allgatherv` merges per-rank discoveries into the next frontier.
+5. All ranks update their distance arrays from the merged frontier.
+
+### Timing Breakdown
+
+The MPI version reports:
+
+- **Computation time** — frontier expansion + distance updates
+- **Communication time** — `MPI_Allgather` + `MPI_Allgatherv` calls
+- **Communication overhead** — percentage of BFS time spent in MPI calls
+- **Speedup & efficiency** — when `--verify` is used (compares to serial)
+
 ## Current Scope
 
-This is the serial baseline implementation. Its purpose is:
+Implemented:
 
-- correctness reference,
-- baseline timing reference,
-- input/output foundation for future OpenMP and MPI versions.
+- Serial BFS baseline (`graph_bfs.cpp`)
+- OpenMP shared-memory parallel BFS (`graph_bfs_omp.cpp`)
+- MPI distributed-memory parallel BFS (`graph_bfs_mpi.cpp`)
+
+Planned:
+
+- Hybrid OpenMP + CUDA implementation
+- Automated benchmarking and scalability analysis
