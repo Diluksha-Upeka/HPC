@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HPC BFS — Algorithm &amp; Performance Visualizer</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="algo_visualizer.css">
+</head>
+<body>
+<nav id="topbar">
+  <div class="logo">&#x26A1; HPC BFS Visualizer</div>
+  
+  <div class="global-config">
+    <div class="cfg-group">
+      <label>Nodes (V):</label>
+      <input type="number" id="cfg-v" value="30" min="5" max="500">
+    </div>
+    <div class="cfg-group">
+      <label>Density:</label>
+      <input type="number" id="cfg-d" value="0.1" step="0.05" min="0" max="1">
+    </div>
+    <button id="btn-regen" class="secondary-btn">&#x1F3B2; Generate Graph</button>
+    <div class="divider"></div>
+    <div class="cfg-group">
+      <label>Load Real Data:</label>
+      <input type="file" id="cfg-file" accept=".json">
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="overview">Overview</button>
+    <button class="tab" data-tab="serial">Serial</button>
+    <button class="tab" data-tab="openmp">OpenMP</button>
+    <button class="tab" data-tab="mpi">MPI</button>
+    <button class="tab" data-tab="hybrid">Hybrid</button>
+    <button class="tab" data-tab="cuda">CUDA</button>
+    <button class="tab perf-tab" data-tab="perf">&#x1F4CA; Performance</button>
+  </div>
+</nav>
+
+<main id="content">
+  <!-- OVERVIEW -->
+  <section id="tab-overview" class="tab-panel active">
+    <div class="hero">
+      <h1>Parallel BFS Strategies</h1>
+      <p class="subtitle">Breadth-First Search across five parallelization paradigms — EC7207 HPC</p>
+    </div>
+    <div class="card-grid">
+      <div class="algo-card" data-target="serial">
+        <div class="card-icon">&#x1F4BB;</div>
+        <h2>Serial BFS</h2>
+        <p>Classic single-threaded FIFO queue traversal. The correctness baseline for all parallel versions.</p>
+        <div class="card-meta"><span>O(V+E)</span><span>1 Thread</span><span>std::queue</span></div>
+      </div>
+      <div class="algo-card" data-target="openmp">
+        <div class="card-icon">&#x1F9F5;</div>
+        <h2>OpenMP BFS</h2>
+        <p>Shared-memory: threads split the frontier with atomic CAS. Thread-local buffers, barrier sync.</p>
+        <div class="card-meta"><span>Shared Memory</span><span>N Threads</span><span>CAS</span></div>
+      </div>
+      <div class="algo-card" data-target="mpi">
+        <div class="card-icon">&#x1F310;</div>
+        <h2>MPI BFS</h2>
+        <p>Distributed-memory: block-partitioned vertices, per-rank frontier, Allgatherv merge.</p>
+        <div class="card-meta"><span>Distributed</span><span>N Ranks</span><span>Allgatherv</span></div>
+      </div>
+      <div class="algo-card" data-target="hybrid">
+        <div class="card-icon">&#x269B;</div>
+        <h2>Hybrid BFS</h2>
+        <p>MPI + OpenMP: ranks partition the graph, threads process the local frontier simultaneously.</p>
+        <div class="card-meta"><span>MPI + OMP</span><span>Ranks x Threads</span><span>Hybrid</span></div>
+      </div>
+      <div class="algo-card" data-target="cuda">
+        <div class="card-icon">&#x1F680;</div>
+        <h2>CUDA BFS</h2>
+        <p>GPU-accelerated: CSR format, one CUDA thread per frontier node, atomicCAS on device memory.</p>
+        <div class="card-meta"><span>GPU</span><span>256 T/Block</span><span>CSR</span></div>
+      </div>
+    </div>
+    <div class="perf-cta"><button class="tab-link" data-target="perf">&#x1F4CA; View Performance Analysis →</button></div>
+  </section>
+
+  <!-- SERIAL -->
+  <section id="tab-serial" class="tab-panel">
+    <div class="panel-header serial-accent"><h1>&#x1F4BB; Serial BFS</h1><p>Single-threaded queue-based traversal — the correctness baseline</p></div>
+    <div class="split">
+      <div class="viz-area"><canvas id="cv-serial"></canvas>
+        <div class="viz-controls"><button id="btn-serial" class="play-btn">&#9654; Animate</button><input id="spd-serial" type="range" min="1" max="10" value="4"><label>Speed</label></div>
+      </div>
+      <div class="info-col">
+        <div class="info-card highlight-serial"><h3>How It Works</h3>
+          <ol><li>Initialize distance[V] = −1; distance[source] = 0</li>
+          <li>Push source into <b>FIFO queue</b></li>
+          <li>Dequeue front vertex → explore all neighbors</li>
+          <li>If neighbor unvisited → set dist, enqueue</li>
+          <li>Repeat until queue empty</li></ol>
+          <div class="diagram-label">↑ The canvas shows <b>one node dequeued at a time</b> (highlighted) processing its neighbors sequentially.</div>
+        </div>
+        <div class="info-card"><h3>Complexity</h3><table><tr><td>Time</td><td><b>O(V + E)</b></td></tr><tr><td>Space</td><td><b>O(V)</b></td></tr><tr><td>Parallelism</td><td>None — sequential baseline</td></tr></table></div>
+        <div class="info-card"><h3>Queue State</h3>
+          <div id="serial-queue" class="queue-viz">Press Animate to begin</div>
+        </div>
+        <div class="info-card"><h3>Live Stats</h3>
+          <div class="stat-row"><span>Current Node</span><span id="s-current">--</span></div>
+          <div class="stat-row"><span>Level</span><span id="s-level">--</span></div>
+          <div class="stat-row"><span>Visited</span><span id="s-visited">--</span></div>
+          <div class="stat-row"><span>Queue Size</span><span id="s-qsize">--</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- OPENMP -->
+  <section id="tab-openmp" class="tab-panel">
+    <div class="panel-header omp-accent"><h1>&#x1F9F5; OpenMP BFS</h1><p>Shared-memory parallel — level-synchronous with atomic CAS</p></div>
+    <div class="split">
+      <div class="viz-area"><canvas id="cv-openmp"></canvas>
+        <div class="viz-controls"><button id="btn-openmp" class="play-btn">&#9654; Animate</button><input id="spd-openmp" type="range" min="1" max="10" value="4"><label>Speed</label>
+          <label class="ctrl-sep">Threads:</label><select id="omp-threads"><option>2</option><option selected>4</option><option>8</option></select>
+        </div>
+      </div>
+      <div class="info-col">
+        <div class="info-card highlight-omp"><h3>How It Works</h3>
+          <ol><li>Frontier = flat vector of current-level vertices</li>
+          <li><code>#pragma omp parallel for schedule(dynamic,64)</code></li>
+          <li>Each thread explores a chunk of the frontier</li>
+          <li><b>__atomic_compare_exchange_n</b> (CAS) claims unvisited neighbors</li>
+          <li>Thread-local buffers → merge after barrier → next frontier</li></ol>
+          <div class="diagram-label">↑ The canvas shows <b>frontier nodes colored by thread assignment</b>. Each color = one thread's workload.</div>
+        </div>
+        <div class="info-card"><h3>Key Insight: Atomic CAS</h3><p>CAS on the distance array ensures <b>exactly one thread</b> claims each unvisited vertex — no duplicates, no locks, no races.</p></div>
+        <div class="info-card"><h3>Thread Buffers</h3><div id="omp-buffers" class="thread-buf-viz">Press Animate to begin</div></div>
+        <div class="info-card"><h3>Live Stats</h3>
+          <div class="stat-row"><span>Level</span><span id="o-level">--</span></div>
+          <div class="stat-row"><span>Visited</span><span id="o-visited">--</span></div>
+          <div class="stat-row"><span>Frontier Size</span><span id="o-fsize">--</span></div>
+          <div class="stat-row"><span>Active Threads</span><span id="o-threads">--</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- MPI -->
+  <section id="tab-mpi" class="tab-panel">
+    <div class="panel-header mpi-accent"><h1>&#x1F310; MPI BFS</h1><p>Distributed-memory — block-partitioned with Allgatherv merge</p></div>
+    <div class="split">
+      <div class="viz-area"><canvas id="cv-mpi"></canvas>
+        <div class="viz-controls"><button id="btn-mpi" class="play-btn">&#9654; Animate</button><input id="spd-mpi" type="range" min="1" max="10" value="4"><label>Speed</label>
+          <label class="ctrl-sep">Ranks:</label><select id="mpi-ranks"><option>2</option><option selected>4</option></select>
+        </div>
+      </div>
+      <div class="info-col">
+        <div class="info-card highlight-mpi"><h3>How It Works</h3>
+          <ol><li>All ranks generate identical graph (same seed)</li>
+          <li>Block partition: rank r owns [r·V/P, (r+1)·V/P)</li>
+          <li>Each rank expands shared frontier, claims only owned neighbors</li>
+          <li><b>MPI_Allgatherv</b> merges per-rank discoveries</li>
+          <li>All ranks update distance from merged frontier</li></ol>
+          <div class="diagram-label">↑ The canvas shows <b>rank ownership regions</b> as colored bands. Communication phases are shown between levels.</div>
+        </div>
+        <div class="info-card"><h3>Communication Pattern</h3><table><tr><td>Count gather</td><td><b>MPI_Allgather</b></td></tr><tr><td>Frontier merge</td><td><b>MPI_Allgatherv</b></td></tr></table></div>
+        <div class="info-card"><h3>Live Stats</h3>
+          <div class="stat-row"><span>Level</span><span id="m-level">--</span></div>
+          <div class="stat-row"><span>Phase</span><span id="m-phase">--</span></div>
+          <div class="stat-row"><span>Local discoveries</span><span id="m-local">--</span></div>
+          <div class="stat-row"><span>Global frontier</span><span id="m-frontier">--</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- HYBRID -->
+  <section id="tab-hybrid" class="tab-panel">
+    <div class="panel-header hybrid-accent"><h1>&#x269B; Hybrid BFS</h1><p>MPI + OpenMP — hierarchical parallelism for clusters</p></div>
+    <div class="split">
+      <div class="viz-area"><canvas id="cv-hybrid"></canvas>
+        <div class="viz-controls"><button id="btn-hybrid" class="play-btn">&#9654; Animate</button><input id="spd-hybrid" type="range" min="1" max="10" value="4"><label>Speed</label></div>
+      </div>
+      <div class="info-col">
+        <div class="info-card highlight-hybrid"><h3>How It Works</h3>
+          <ol><li><b>MPI</b> handles distributed graph partitions</li>
+          <li><b>OpenMP</b> threads handle local frontier exploration per rank</li>
+          <li>Reduces MPI communicator overhead by aggregating work</li>
+          <li>Hybrid Sync: OpenMP barrier → MPI Allgatherv</li></ol>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CUDA -->
+  <section id="tab-cuda" class="tab-panel">
+    <div class="panel-header cuda-accent"><h1>&#x1F680; CUDA BFS</h1><p>GPU-accelerated — CSR graph + kernel-level parallelism</p></div>
+    <div class="split">
+      <div class="viz-area"><canvas id="cv-cuda"></canvas>
+        <div class="viz-controls"><button id="btn-cuda" class="play-btn">&#9654; Animate</button><input id="spd-cuda" type="range" min="1" max="10" value="4"><label>Speed</label></div>
+      </div>
+      <div class="info-col">
+        <div class="info-card highlight-cuda"><h3>How It Works</h3>
+          <ol><li>Convert adjacency list → <b>CSR</b> (row_offsets + col_indices)</li>
+          <li>Copy graph + distance array to GPU global memory</li>
+          <li>Launch kernel: <b>1 CUDA thread per frontier vertex</b></li>
+          <li>Each thread iterates CSR neighbors; <b>atomicCAS</b> claims discoveries</li>
+          <li><b>atomicAdd</b> appends to next frontier; cudaDeviceSynchronize</li></ol>
+          <div class="diagram-label">↑ Canvas shows <b>GPU grid/block structure</b> mapping to frontier. All frontier nodes processed in parallel.</div>
+        </div>
+        <div class="info-card"><h3>CSR Memory Layout</h3><div id="csr-viz" class="csr-diagram">Press Animate to see CSR</div></div>
+        <div class="info-card"><h3>Kernel Config</h3><table><tr><td>Threads/Block</td><td><b>256</b></td></tr><tr><td>Blocks</td><td>⌈frontier/256⌉</td></tr><tr><td>Sync</td><td>cudaDeviceSynchronize</td></tr></table></div>
+        <div class="info-card"><h3>Live Stats</h3>
+          <div class="stat-row"><span>Level</span><span id="c-level">--</span></div>
+          <div class="stat-row"><span>Kernel Blocks</span><span id="c-blocks">--</span></div>
+          <div class="stat-row"><span>CUDA Threads</span><span id="c-cthreads">--</span></div>
+          <div class="stat-row"><span>Frontier</span><span id="c-frontier">--</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PERFORMANCE ANALYSIS -->
+  <section id="tab-perf" class="tab-panel">
+    <div class="panel-header perf-accent">
+      <h1>&#x1F4CA; Performance Analysis</h1>
+      <p id="perf-source-label">Showing <span style="color:#f43f5e;font-weight:700">MOCK</span> data. Use "Load Real Data" in the top bar to load actual JSON results from your C++ executables.</p>
+    </div>
+    <div class="perf-grid">
+      <div class="perf-card wide">
+        <h3>Execution Time Comparison</h3>
+        <canvas id="cv-time-bar" height="280"></canvas>
+      </div>
+      <div class="perf-card">
+        <h3>Speedup vs Threads/Processes</h3>
+        <canvas id="cv-speedup" height="250"></canvas>
+      </div>
+      <div class="perf-card">
+        <h3>Parallel Efficiency</h3>
+        <canvas id="cv-efficiency" height="250"></canvas>
+      </div>
+      <div class="perf-card wide">
+        <h3>Timing Breakdown</h3>
+        <table class="perf-table" id="perf-table">
+          <thead><tr><th>Implementation</th><th>Graph Gen (ms)</th><th>BFS Time (ms)</th><th>Speedup</th><th>Efficiency</th><th>Correctness</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="perf-card">
+        <h3>MPI Communication Overhead</h3>
+        <canvas id="cv-mpi-comm" height="220"></canvas>
+      </div>
+      <div class="perf-card">
+        <h3>Analysis Note</h3>
+        <p class="param-note" style="margin-top:0">
+          The charts above reflect the timing of the Graph Traversal phase only (BFS Time).<br><br>
+          Efficiency is calculated as: <code>Speedup / N_processors</code>.<br><br>
+          For MPI, the overhead represents the percentage of total BFS time spent in <code>MPI_Allgatherv</code> synchronizing the frontiers across the cluster.
+        </p>
+    </div>
+  </section>
+</main>
+
+<script src="algo_visualizer.js"></script>
+</body>
+</html>
