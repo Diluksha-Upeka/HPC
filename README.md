@@ -151,6 +151,46 @@ Run it with:
 Get-Content .\demo_manual_input.txt | .\graph_bfs.exe --manual
 ```
 
+## OpenMP Program
+
+Build:
+
+```powershell
+g++ -std=c++17 -O2 -Wall -Wextra -fopenmp -o graph_bfs_omp.exe graph_bfs_omp.cpp
+```
+
+Run a synthetic graph:
+
+```powershell
+.\graph_bfs_omp.exe 1000 0.01 0 --threads 4
+```
+
+Run with serial verification:
+
+```powershell
+.\graph_bfs_omp.exe 1000 0.01 0 --threads 4 --verify
+```
+
+Run manual mode:
+
+```powershell
+Get-Content .\demo_manual_input.txt | .\graph_bfs_omp.exe --manual --threads 4
+```
+
+Generate JSON from the OpenMP program:
+
+```powershell
+Get-Content .\demo_manual_input.txt | .\graph_bfs_omp.exe --manual --json > graph.json
+```
+
+Supported OpenMP options:
+
+- `--threads N` to choose the number of OpenMP threads,
+- `--verify` to compare parallel BFS against the serial BFS result,
+- `--manual` to read graph input from stdin,
+- `--json` to emit JSON for the visualizer,
+- `--seed N` to set the random generator seed.
+
 ## JSON Output And Visualizer
 
 To generate JSON output for visualization:
