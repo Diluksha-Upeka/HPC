@@ -1,4 +1,6 @@
 // Parallel BFS using OpenMP (level-synchronous approach)
+// This program creates a graph and runs Breadth-First Search (BFS).
+// It includes both serial BFS and parallel BFS so results can be compared.
 
 #include <chrono>
 #include <cstdint>
@@ -12,7 +14,9 @@
 
 #include <omp.h>
 
-// Adjacency list representation
+// Graph stores:
+// - number of vertices
+// - adjacency list, where adj[u] contains all neighbors of vertex u
 struct Graph {
     int num_vertices;
     std::vector<std::vector<int>> adj;
@@ -20,39 +24,56 @@ struct Graph {
     explicit Graph(int V) : num_vertices(V), adj(V) {}
 };
 
+// Adds an undirected edge between u and v.
+// Because it is undirected, u connects to v and v connects to u.
 bool add_undirected_edge(Graph& graph, int u, int v) {
+    // Reject invalid vertices and self-loops.
     if (u < 0 || v < 0 || u >= graph.num_vertices || v >= graph.num_vertices || u == v)
         return false;
+
     graph.adj[u].push_back(v);
     graph.adj[v].push_back(u);
+
     return true;
 }
 
-// Generate random undirected graph with given edge probability
+// Generate random undirected graph with given edge probability.
+// density controls how likely each possible edge is to exist.
 Graph generate_graph(int V, double density, uint64_t seed = 42) {
     Graph g(V);
+
     if (density <= 0.0) return g;
     if (density >= 1.0) density = 1.0;
 
+    // Random number generator with fixed seed for repeatable results.
     std::mt19937_64 rng(seed);
     std::uniform_real_distribution<double> dist(0.0, 1.0);
 
+    // Try every possible pair of vertices once.
     for (int u = 0; u < V; ++u) {
         for (int v = u + 1; v < V; ++v) {
+            // Add the edge if the random value is below density.
             if (dist(rng) < density) {
                 g.adj[u].push_back(v);
                 g.adj[v].push_back(u);
             }
         }
     }
+
     return g;
 }
 
-// Serial BFS - used as correctness reference
+// Serial BFS - used as correctness reference.
+// It visits vertices level by level starting from source.
 std::vector<int> bfs_serial(const Graph& graph, int source) {
     const int V = graph.num_vertices;
+
+    // distance[i] is the distance from source to vertex i.
+    // -1 means the vertex has not been visited.
     std::vector<int> distance(V, -1);
-    std::queue<int> frontier;
+
+    // Queue stores the next vertices to explore.
+    std::queue<int> frontier;    //////////////////////
 
     distance[source] = 0;
     frontier.push(source);
@@ -60,52 +81,68 @@ std::vector<int> bfs_serial(const Graph& graph, int source) {
     while (!frontier.empty()) {
         int current = frontier.front();
         frontier.pop();
+
+        // All unvisited neighbors will be one step farther.
         int next_dist = distance[current] + 1;
+
         for (int neighbor : graph.adj[current]) {
+            // Visit the neighbor only once.
             if (distance[neighbor] == -1) {
                 distance[neighbor] = next_dist;
                 frontier.push(neighbor);
             }
         }
     }
+
     return distance;
 }
 
-// Parallel BFS using OpenMP
-// Expands all nodes at each BFS level concurrently, syncs before next level
+// Parallel BFS using OpenMP./////////////////////////////
+// Expands all nodes at each BFS level concurrently, then syncs before next level.
 std::vector<int> bfs_parallel(const Graph& graph, int source, int num_threads) {
     const int V = graph.num_vertices;
+
+    // -1 means not visited yet.
     std::vector<int> distance(V, -1);
 
+    // Set the number of OpenMP threads.
     omp_set_num_threads(num_threads);
 
     distance[source] = 0;
 
+    // current_frontier stores vertices in the current BFS level.
     std::vector<int> current_frontier;
     current_frontier.push_back(source);
 
     int level = 0;
 
+    // Continue until there are no more vertices to explore.
     while (!current_frontier.empty()) {
         level++;
         const int frontier_size = static_cast<int>(current_frontier.size());
 
-        // Each thread collects discovered nodes in its own buffer
+        // Each thread stores newly discovered vertices here.
+        // This avoids many threads writing to one shared vector.
         std::vector<std::vector<int>> thread_local_next(num_threads);
 
-        #pragma omp parallel
+        #pragma omp parallel    
         {
             int tid = omp_get_thread_num();
             std::vector<int>& local_next = thread_local_next[tid];
 
+            // Split the current frontier among threads.
             #pragma omp for schedule(dynamic, 64)
             for (int i = 0; i < frontier_size; ++i) {
                 int current = current_frontier[i];
 
+                // Check all neighbors of the current vertex.
                 for (int neighbor : graph.adj[current]) {
-                    // Atomic CAS to prevent race conditions
+                    // Atomic compare-and-swap:
+                    // only one thread can change distance[neighbor] from -1 to level.
+                    // This prevents duplicate visits caused by race conditions.
                     int expected = -1;
-                    if (__atomic_compare_exchange_n(
+
+                    if (__atomic_compare_exchange_n(//////////////////////////only one thread can mark a node as visited
                             &distance[neighbor],
                             &expected,
                             level,
@@ -118,48 +155,64 @@ std::vector<int> bfs_parallel(const Graph& graph, int source, int num_threads) {
             }
         }
 
-        // Merge all thread-local buffers into next frontier
+     ///////////////////// Merge all thread-local results into the next frontier.
         current_frontier.clear();
+
         for (auto& local : thread_local_next) {
-            current_frontier.insert(current_frontier.end(),
-                                    local.begin(), local.end());
+            current_frontier.insert(
+                current_frontier.end(),
+                local.begin(),
+                local.end()
+            );
         }
     }
 
     return distance;
 }
 
+// Ask user for vertex count and BFS source when using manual input.
 bool prompt_for_manual_config(int& V, int& source) {
     std::cerr << "Enter number of vertices: ";
+
     if (!(std::cin >> V) || V <= 0) {
         std::cerr << "Error: number of vertices must be > 0.\n";
         return false;
     }
+
     std::cerr << "Enter BFS source vertex [0, " << V - 1 << "]: ";
+
     if (!(std::cin >> source) || source < 0 || source >= V) {
         std::cerr << "Error: source must be in [0, " << V - 1 << "].\n";
         return false;
     }
+
     return true;
 }
 
+// Read graph edges from the user.
 bool read_manual_graph(Graph& graph) {
     std::cerr << "Enter number of undirected edges: ";
+
     int edge_count = 0;
+
     if (!(std::cin >> edge_count) || edge_count < 0) {
         std::cerr << "Error: edge count must be a non-negative integer.\n";
         return false;
     }
+
     std::cerr << "Enter edges as pairs: u v\n";
     std::cerr << "Example: 0 3\n";
 
+    // Read each edge and add it to the graph.
     for (int edge_index = 0; edge_index < edge_count; ++edge_index) {
         int u = -1, v = -1;
+
         if (!(std::cin >> u >> v)) {
             std::cerr << "Error: failed to read edge " << edge_index
                       << ". Expected two integers.\n";
             return false;
         }
+
         if (!add_undirected_edge(graph, u, v)) {
             std::cerr << "Error: invalid edge (" << u << ", " << v << ")"
                       << ". Vertices must be distinct and in [0, "
@@ -167,9 +220,11 @@ bool read_manual_graph(Graph& graph) {
             return false;
         }
     }
+
     return true;
 }
 
+// Show command-line help for the program.
 void print_usage(const char* program) {
     std::cout
         << "Usage: " << program << " [OPTIONS] [V] [density] [source]\n"
@@ -193,7 +248,7 @@ void print_usage(const char* program) {
         << "  " << program << " 1000 0.01 0 --threads 4 --verify\n"
         << "  " << program << " --manual --threads 2\n";
 }
-
+//upper part is mine
 void print_text(const Graph& graph, const std::vector<int>& dist, int source,
                 double gen_ms, double bfs_ms, int num_threads,
                 double serial_ms) {
